@@ -31,14 +31,14 @@ let timeLeft = 180, timerInterval, cpuSpeed = 6;
 let player1Name = "Player 1", player2Name = "Player 2";
 let particles = [];
 
-// Dificuldades
+// Dificuldades corrigidas
 const difficulties = {
-  veryeasy: {cpuSpeed:2, ballSpeed:4, label:"Muito Fácil"},
-  easy: {cpuSpeed:4, ballSpeed:5, label:"Fácil"},
-  normal: {cpuSpeed:6, ballSpeed:5, label:"Normal"},
-  medium: {cpuSpeed:7, ballSpeed:6, label:"Médio"},
-  hard: {cpuSpeed:9, ballSpeed:7, label:"Difícil"},
-  impossible: {cpuSpeed:1, ballSpeed:5, label:"Impossível"}
+  veryeasy:  { cpuSpeed: 1, ballSpeed: 2, label: "Muito Fácil" },
+  easy:      { cpuSpeed: 3, ballSpeed: 2, label: "Fácil" },
+  normal:    { cpuSpeed: 4, ballSpeed: 4, label: "Normal" },
+  medium:    { cpuSpeed: 5, ballSpeed: 7, label: "Médio" },
+  hard:      { cpuSpeed: 6, ballSpeed: 8, label: "Difícil" },
+  impossible:{ cpuSpeed: 9, ballSpeed: 10, label: "Impossível" }
 };
 
 // Menus

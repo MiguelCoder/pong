@@ -1,25 +1,109 @@
+/* -----------------------------
+   GERAL
+----------------------------- */
+body { 
+  background: #000; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  height: 100vh; 
+  margin: 0; 
+  color: white; 
+  font-family: Arial, sans-serif; 
+  position: relative;
+}
 
-body { background:#000; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; color:white; font-family:Arial; position:relative;}
-canvas { background:black; border:2px solid white; display:none; }
-#menu,#difficultyMenu,#helpMenu,#nameMenu,#endMenu { position:absolute; text-align:center; top:50%; left:50%; transform:translate(-50%,-50%);}
-.menu-option { background:#222; color:white; border:2px solid #555; padding:10px 20px; margin:10px auto; font-size:18px; cursor:pointer; border-radius:5px; width:300px; display:block; text-align:center; }
-.menu-option:hover,.selected { background:#444; }
-#timer { position:absolute; top:10px; left:50%; transform:translateX(-50%); font-size:24px; }
-#message { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:32px; color:yellow; text-align:center; background: rgba(0,0,0,0.7); padding: 20px 40px; border-radius:10px; display:none;}
-#nameMenu input { margin:5px; padding:5px; font-size:18px; width:250px; display:block; margin-left:auto; margin-right:auto;}
-
-canvas {
-  width: 100%;
-  height: auto;
-  max-width: 800px;
-  display: block;
+canvas { 
+  background: black; 
+  border: 2px solid white; 
+  display: none; 
+  width: 100%; 
+  height: auto; 
+  max-width: 800px; 
+  display: block; 
   margin: auto;
 }
 
+/* -----------------------------
+   MENUS
+----------------------------- */
+#menu, #difficultyMenu, #helpMenu, #nameMenu, #endMenu, #rankingMenu { 
+  position: absolute; 
+  text-align: center; 
+  top: 50%; 
+  left: 50%; 
+  transform: translate(-50%, -50%);
+}
+
+.menu-option { 
+  background: #222; 
+  color: white; 
+  border: 2px solid #555; 
+  padding: 10px 20px; 
+  margin: 10px auto; 
+  font-size: 18px; 
+  cursor: pointer; 
+  border-radius: 5px; 
+  width: 300px; 
+  display: block; 
+  text-align: center; 
+}
+
+.menu-option:hover, .selected { 
+  background: #444; 
+}
+
+/* -----------------------------
+   TIMER E MENSAGEM
+----------------------------- */
+#timer {
+  position: fixed;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(0,0,0,0.7);
+  padding: 6px 18px;
+  border-radius: 10px;
+  z-index: 9999; /* sempre acima do canvas */
+}
+
+#message { 
+  position: absolute; 
+  top: 50%; 
+  left: 50%; 
+  transform: translate(-50%, -50%); 
+  font-size: 32px; 
+  color: yellow; 
+  text-align: center; 
+  background: rgba(0,0,0,0.7); 
+  padding: 20px 40px; 
+  border-radius: 10px; 
+  display: none;
+}
+
+/* -----------------------------
+   INPUT DE NOME
+----------------------------- */
+#nameMenu input { 
+  margin: 5px; 
+  padding: 5px; 
+  font-size: 18px; 
+  width: 250px; 
+  display: block; 
+  margin-left: auto; 
+  margin-right: auto;
+}
+
+/* -----------------------------
+   CONTROLES TOUCH
+----------------------------- */
 .touch-controls {
-  display: flex;
-  justify-content: space-between;
+  display: none; /* invisível no desktop */
   margin-top: 10px;
+  justify-content: space-between;
 }
 
 .touch-controls .side {
@@ -39,4 +123,32 @@ canvas {
   justify-content: center;
   font-size: 20px;
   user-select: none;
+}
+
+/* -----------------------------
+   ADAPTATIVO / MOBILE
+----------------------------- */
+@media (max-width: 768px) {
+  .touch-controls {
+    display: flex; /* visível em mobile */
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .touch-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 18px;
+  }
+
+  #menu, #difficultyMenu, #helpMenu, #nameMenu, #endMenu, #rankingMenu {
+    width: 90%;
+  }
+
+  .menu-option {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px 0;
+  }
 }
