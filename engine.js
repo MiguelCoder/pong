@@ -61,10 +61,15 @@ let cpuDifficulty = "Normal";
 let isMobile = false;
 let winner = null;
 
+// Controles touch
+let leftTouchId = null;
+let rightTouchId = null;
+
 // Efeitos de colisão
 let collisionEffects = [];
 let screenShake = { intensity: 0, duration: 0 };
 let victoryEffects = [];
+let victoryMessage = { show: false, text: "", color: "", timer: 0 };
 
 // Função para mostrar/esconder menus
 function showMenu(menuId) {
@@ -85,6 +90,12 @@ function checkMobile() {
     player2.x = canvas.width - 20;
     player1.y = canvas.height / 2 - 50;
     player2.y = canvas.height / 2 - 50;
+    
+    // Ajustar botões para mobile
+    document.querySelectorAll('button').forEach(button => {
+      button.style.padding = '15px 25px';
+      button.style.fontSize = '16px';
+    });
   }
 }
 
@@ -110,6 +121,7 @@ function backToMenu() {
   gameOver = false;
   winner = null;
   victoryEffects = [];
+  victoryMessage.show = false;
 }
 
 function togglePause() {
@@ -216,6 +228,13 @@ function createVictoryEffect() {
   }
 }
 
+function showVictoryMessage(text, color) {
+  victoryMessage.show = true;
+  victoryMessage.text = text;
+  victoryMessage.color = color;
+  victoryMessage.timer = 180;
+}
+
 function createScreenShake(intensity = 5, duration = 10) {
   screenShake.intensity = intensity;
   screenShake.duration = duration;
@@ -238,6 +257,13 @@ function updateCollisionEffects() {
     effect.life -= 0.02;
     if (effect.life <= 0) {
       victoryEffects.splice(i, 1);
+    }
+  }
+  
+  if (victoryMessage.show) {
+    victoryMessage.timer--;
+    if (victoryMessage.timer <= 0) {
+      victoryMessage.show = false;
     }
   }
   
@@ -276,6 +302,32 @@ function drawVictoryEffects() {
     ctx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawVictoryMessage() {
+  if (victoryMessage.show) {
+    const alpha = Math.min(1, victoryMessage.timer / 60);
+    ctx.globalAlpha = alpha;
+    
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    const messageWidth = 400;
+    const messageHeight = 100;
+    const x = canvas.width / 2 - messageWidth / 2;
+    const y = canvas.height / 2 - messageHeight / 2;
+    
+    ctx.fillRect(x, y, messageWidth, messageHeight);
+    
+    ctx.strokeStyle = victoryMessage.color;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = victoryMessage.color;
+    ctx.shadowBlur = 15;
+    ctx.strokeRect(x, y, messageWidth, messageHeight);
+    
+    ctx.shadowBlur = 0;
+    drawText(victoryMessage.text, canvas.width / 2, canvas.height / 2 - 10, victoryMessage.color, "28px");
+    
     ctx.globalAlpha = 1;
   }
 }
@@ -395,31 +447,37 @@ function endGame() {
   clearInterval(gameInterval);
   clearInterval(timerInterval);
   
-  // Determinar vencedor
   if (player1.score > player2.score) {
     winner = player1;
+    showVictoryMessage(`${player1.name} Venceu!`, "cyan");
     if (winSound) {
       winSound.currentTime = 0;
       winSound.play();
     }
   } else if (player2.score > player1.score) {
     winner = player2;
-    if (againstCPU && loseSound) {
-      loseSound.currentTime = 0;
-      loseSound.play();
-    } else if (winSound) {
-      winSound.currentTime = 0;
-      winSound.play();
+    if (againstCPU) {
+      showVictoryMessage("CPU Venceu!", "purple");
+      if (loseSound) {
+        loseSound.currentTime = 0;
+        loseSound.play();
+      }
+    } else {
+      showVictoryMessage(`${player2.name} Venceu!`, "purple");
+      if (winSound) {
+        winSound.currentTime = 0;
+        winSound.play();
+      }
     }
   } else {
     winner = null;
+    showVictoryMessage("Empate!", "white");
     if (winSound) {
       winSound.currentTime = 0;
       winSound.play();
     }
   }
   
-  // Criar efeitos de vitória
   createVictoryEffect();
   createScreenShake(10, 20);
 }
@@ -429,12 +487,15 @@ function update() {
 
   updateCollisionEffects();
 
-  if (player1.moveUp) player1.y -= player1.speed;
-  if (player1.moveDown) player1.y += player1.speed;
-  
-  if (!againstCPU) {
-    if (player2.moveUp) player2.y -= player2.speed;
-    if (player2.moveDown) player2.y += player2.speed;
+  // Movimento dos jogadores (apenas se não for mobile)
+  if (!isMobile) {
+    if (player1.moveUp) player1.y -= player1.speed;
+    if (player1.moveDown) player1.y += player1.speed;
+    
+    if (!againstCPU) {
+      if (player2.moveUp) player2.y -= player2.speed;
+      if (player2.moveDown) player2.y += player2.speed;
+    }
   }
 
   limitPaddleMovement();
@@ -506,6 +567,10 @@ function render() {
   drawRect(player1.x, player1.y, player1.width, player1.height, "cyan");
   drawRect(player2.x, player2.y, player2.width, player2.height, "purple");
 
+  if (victoryMessage.show) {
+    drawVictoryMessage();
+  }
+
   if (isPaused) {
     drawText("PAUSADO", canvas.width / 2, canvas.height / 2, "yellow", "40px");
   }
@@ -523,14 +588,19 @@ function render() {
     drawText("FIM DE JOGO", canvas.width / 2, canvas.height / 2 - 60, "white", "30px");
     
     if (winner) {
-      drawText(`${winner.name} Venceu!`, canvas.width / 2, canvas.height / 2 - 20, winner === player1 ? "cyan" : "purple", "36px");
+      const winnerName = againstCPU && winner === player2 ? "CPU" : winner.name;
+      drawText(`${winnerName} Venceu!`, canvas.width / 2, canvas.height / 2 - 20, winner === player1 ? "cyan" : "purple", "36px");
       drawText(`Placar: ${player1.score} - ${player2.score}`, canvas.width / 2, canvas.height / 2 + 20, "white", "24px");
     } else {
       drawText("Empate!", canvas.width / 2, canvas.height / 2 - 20, "white", "36px");
       drawText(`Placar: ${player1.score} - ${player2.score}`, canvas.width / 2, canvas.height / 2 + 20, "white", "24px");
     }
     
-    drawText("Pressione ESC para voltar ao menu", canvas.width / 2, canvas.height / 2 + 60, "yellow", "16px");
+    if (isMobile) {
+      drawText("Toque para voltar ao menu", canvas.width / 2, canvas.height / 2 + 60, "yellow", "16px");
+    } else {
+      drawText("Pressione ESC para voltar ao menu", canvas.width / 2, canvas.height / 2 + 60, "yellow", "16px");
+    }
   }
   
   ctx.restore();
@@ -600,6 +670,7 @@ function startGame(difficulty) {
 
   collisionEffects = [];
   victoryEffects = [];
+  victoryMessage.show = false;
   screenShake = { intensity: 0, duration: 0 };
 
   resetBall();
@@ -618,12 +689,14 @@ function startGame(difficulty) {
 
 // Controles de teclado
 document.addEventListener("keydown", (e) => {
-  if (e.key === "w" || e.key === "W") player1.moveUp = true;
-  if (e.key === "s" || e.key === "S") player1.moveDown = true;
-  
-  if (!againstCPU) {
-    if (e.key === "ArrowUp") player2.moveUp = true;
-    if (e.key === "ArrowDown") player2.moveDown = true;
+  if (!isMobile) {
+    if (e.key === "w" || e.key === "W") player1.moveUp = true;
+    if (e.key === "s" || e.key === "S") player1.moveDown = true;
+    
+    if (!againstCPU) {
+      if (e.key === "ArrowUp") player2.moveUp = true;
+      if (e.key === "ArrowDown") player2.moveDown = true;
+    }
   }
   
   if (e.key === " ") togglePause();
@@ -632,97 +705,191 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("keyup", (e) => {
-  if (e.key === "w" || e.key === "W") player1.moveUp = false;
-  if (e.key === "s" || e.key === "S") player1.moveDown = false;
-  
-  if (!againstCPU) {
-    if (e.key === "ArrowUp") player2.moveUp = false;
-    if (e.key === "ArrowDown") player2.moveDown = false;
+  if (!isMobile) {
+    if (e.key === "w" || e.key === "W") player1.moveUp = false;
+    if (e.key === "s" || e.key === "S") player1.moveDown = false;
+    
+    if (!againstCPU) {
+      if (e.key === "ArrowUp") player2.moveUp = false;
+      if (e.key === "ArrowDown") player2.moveDown = false;
+    }
   }
 });
 
-// Controles de toque para mobile
-let leftTouchActive = false;
-let rightTouchActive = false;
+// CONTROLES TOUCH PARA MOBILE
+function getTouchY(touch) {
+  const rect = canvas.getBoundingClientRect();
+  return touch.clientY - rect.top;
+}
 
-document.getElementById("leftTouch").addEventListener("touchstart", (e) => {
+// Player 1 - Controle por arraste
+canvas.addEventListener('touchstart', (e) => {
   e.preventDefault();
-  leftTouchActive = true;
-});
-
-document.getElementById("leftTouch").addEventListener("touchend", (e) => {
-  e.preventDefault();
-  leftTouchActive = false;
-});
-
-document.getElementById("rightTouch").addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  rightTouchActive = true;
-});
-
-document.getElementById("rightTouch").addEventListener("touchend", (e) => {
-  e.preventDefault();
-  rightTouchActive = false;
-});
-
-function updateTouchControls() {
-  if (isMobile) {
-    player1.moveUp = leftTouchActive;
-    player1.moveDown = false;
+  const touches = e.changedTouches;
+  
+  for (let i = 0; i < touches.length; i++) {
+    const touch = touches[i];
+    const touchX = touch.clientX;
+    const touchY = getTouchY(touch);
     
-    if (!againstCPU) {
-      player2.moveUp = rightTouchActive;
-      player2.moveDown = false;
+    // Verificar se o toque está na área do player 1 (lado esquerdo)
+    if (touchX < canvas.width / 2) {
+      leftTouchId = touch.identifier;
+      player1.y = touchY - player1.height / 2;
     }
+    // Verificar se o toque está na área do player 2 (lado direito) e não é contra CPU
+    else if (!againstCPU) {
+      rightTouchId = touch.identifier;
+      player2.y = touchY - player2.height / 2;
+    }
+  }
+});
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const touches = e.changedTouches;
+  
+  for (let i = 0; i < touches.length; i++) {
+    const touch = touches[i];
+    const touchY = getTouchY(touch);
+    
+    if (touch.identifier === leftTouchId) {
+      player1.y = touchY - player1.height / 2;
+    }
+    else if (!againstCPU && touch.identifier === rightTouchId) {
+      player2.y = touchY - player2.height / 2;
+    }
+  }
+  
+  // Garantir que as raquetes não saiam da tela
+  limitPaddleMovement();
+});
+
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  const touches = e.changedTouches;
+  
+  for (let i = 0; i < touches.length; i++) {
+    const touch = touches[i];
+    
+    if (touch.identifier === leftTouchId) {
+      leftTouchId = null;
+    }
+    else if (touch.identifier === rightTouchId) {
+      rightTouchId = null;
+    }
+  }
+});
+
+canvas.addEventListener('touchcancel', (e) => {
+  e.preventDefault();
+  leftTouchId = null;
+  rightTouchId = null;
+});
+
+// Toque na tela para voltar ao menu quando o jogo acabar
+canvas.addEventListener("click", (e) => {
+  if (gameOver) {
+    backToMenu();
+  }
+});
+
+canvas.addEventListener("touchend", (e) => {
+  if (gameOver) {
+    e.preventDefault();
+    backToMenu();
+  }
+});
+
+// CONFIGURAÇÃO DOS EVENT LISTENERS - CORRIGIDO
+function setupEventListeners() {
+  // Menu principal
+  const playButton = document.getElementById("playButton");
+  const rankingButton = document.getElementById("rankingButton");
+  const helpButton = document.getElementById("helpButton");
+  
+  if (playButton) {
+    playButton.addEventListener("click", function() {
+      showMenu('playerMenu');
+    });
+  }
+  
+  if (rankingButton) {
+    rankingButton.addEventListener("click", function() {
+      showMenu('rankingMenu');
+    });
+  }
+  
+  if (helpButton) {
+    helpButton.addEventListener("click", function() {
+      showMenu('helpMenu');
+    });
+  }
+  
+  // Menu de jogadores
+  const continueButton = document.getElementById("continueButton");
+  const backFromPlayerMenu = document.getElementById("backFromPlayerMenu");
+  
+  if (continueButton) {
+    continueButton.addEventListener("click", savePlayerNames);
+  }
+  
+  if (backFromPlayerMenu) {
+    backFromPlayerMenu.addEventListener("click", function() {
+      showMenu('mainMenu');
+    });
+  }
+  
+  // Menu de dificuldade
+  const difficultyButtons = document.querySelectorAll("#difficultyMenu button[data-difficulty]");
+  const backFromDifficultyMenu = document.getElementById("backFromDifficultyMenu");
+  
+  if (difficultyButtons) {
+    difficultyButtons.forEach(button => {
+      button.addEventListener("click", function() {
+        startGame(this.getAttribute('data-difficulty'));
+      });
+    });
+  }
+  
+  if (backFromDifficultyMenu) {
+    backFromDifficultyMenu.addEventListener("click", function() {
+      showMenu('playerMenu');
+    });
+  }
+  
+  // Menu de ranking
+  const backFromRankingMenu = document.getElementById("backFromRankingMenu");
+  if (backFromRankingMenu) {
+    backFromRankingMenu.addEventListener("click", function() {
+      showMenu('mainMenu');
+    });
+  }
+  
+  // Menu de ajuda
+  const backFromHelpMenu = document.getElementById("backFromHelpMenu");
+  if (backFromHelpMenu) {
+    backFromHelpMenu.addEventListener("click", function() {
+      showMenu('mainMenu');
+    });
+  }
+  
+  // Tela de jogo
+  const backToMenuButton = document.getElementById("backToMenuButton");
+  const pauseButton = document.getElementById("pauseButton");
+  
+  if (backToMenuButton) {
+    backToMenuButton.addEventListener("click", backToMenu);
+  }
+  
+  if (pauseButton) {
+    pauseButton.addEventListener("click", togglePause);
   }
 }
 
-const originalGameLoop = gameLoop;
-gameLoop = function() {
-  updateTouchControls();
-  originalGameLoop();
-};
-
-// Configuração dos event listeners para os botões
+// Inicialização
 document.addEventListener("DOMContentLoaded", function() {
-  document.getElementById("playButton").addEventListener("click", function() {
-    showMenu('playerMenu');
-  });
-  
-  document.getElementById("rankingButton").addEventListener("click", function() {
-    showMenu('rankingMenu');
-  });
-  
-  document.getElementById("helpButton").addEventListener("click", function() {
-    showMenu('helpMenu');
-  });
-  
-  document.getElementById("continueButton").addEventListener("click", savePlayerNames);
-  document.getElementById("backFromPlayerMenu").addEventListener("click", function() {
-    showMenu('mainMenu');
-  });
-  
-  document.querySelectorAll("#difficultyMenu button[data-difficulty]").forEach(button => {
-    button.addEventListener("click", function() {
-      startGame(this.getAttribute('data-difficulty'));
-    });
-  });
-  
-  document.getElementById("backFromDifficultyMenu").addEventListener("click", function() {
-    showMenu('playerMenu');
-  });
-  
-  document.getElementById("backFromRankingMenu").addEventListener("click", function() {
-    showMenu('mainMenu');
-  });
-  
-  document.getElementById("backFromHelpMenu").addEventListener("click", function() {
-    showMenu('mainMenu');
-  });
-  
-  document.getElementById("backToMenuButton").addEventListener("click", backToMenu);
-  document.getElementById("pauseButton").addEventListener("click", togglePause);
-  
+  setupEventListeners();
   checkMobile();
   console.log("Pong Neon carregado com sucesso!");
 });
