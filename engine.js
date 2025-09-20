@@ -1,293 +1,591 @@
-// -----------------------------
-// ELEMENTOS DO HTML
-// -----------------------------
-const canvas = document.getElementById("gameCanvas");
+// Variáveis globais
+const canvas = document.getElementById("pongCanvas");
 const ctx = canvas.getContext("2d");
-const timerEl = document.getElementById("timer");
-const messageEl = document.getElementById("message");
 
+// Elementos da UI
+const player1ScoreElem = document.querySelector("#player1Score .score-value");
+const player2ScoreElem = document.querySelector("#player2Score .score-value");
+const player1NameElem = document.querySelector("#player1Score .player-name");
+const player2NameElem = document.querySelector("#player2Score .player-name");
+const gameTimerElem = document.getElementById("gameTimer");
+const touchControls = document.getElementById("touchControls");
+
+// Sons
 const hitSound = document.getElementById("hitSound");
 const pointSound = document.getElementById("pointSound");
 const winSound = document.getElementById("winSound");
 const loseSound = document.getElementById("loseSound");
 
-const menuEl = document.getElementById("menu");
-const difficultyMenuEl = document.getElementById("difficultyMenu");
-const endMenuEl = document.getElementById("endMenu");
-const helpMenuEl = document.getElementById("helpMenu");
-const nameMenuEl = document.getElementById("nameMenu");
-const rankingMenuEl = document.getElementById("rankingMenu");
-const startGameBtn = document.getElementById("startGameBtn");
-
-// -----------------------------
-// VARIÁVEIS DE CONFIGURAÇÃO
-// -----------------------------
-let paddleHeight = 100, paddleWidth = 10, paddle1Y, paddle2Y, paddleSpeed = 8;
-let ballX, ballY, ballSpeedX, ballSpeedY, ballBaseSpeed = 5, ballSize = 10;
-let player1Score, player2Score, gameMode = "cpu";
-let upPressed = false, downPressed = false, wPressed = false, sPressed = false;
-let gameRunning = false, paused = false, waitingStart = false;
-let timeLeft = 180, timerInterval, cpuSpeed = 6;
-let player1Name = "Player 1", player2Name = "Player 2";
-let particles = [];
-
-// Dificuldades corrigidas
-const difficulties = {
-  veryeasy:  { cpuSpeed: 1, ballSpeed: 2, label: "Muito Fácil" },
-  easy:      { cpuSpeed: 3, ballSpeed: 2, label: "Fácil" },
-  normal:    { cpuSpeed: 4, ballSpeed: 4, label: "Normal" },
-  medium:    { cpuSpeed: 5, ballSpeed: 7, label: "Médio" },
-  hard:      { cpuSpeed: 6, ballSpeed: 8, label: "Difícil" },
-  impossible:{ cpuSpeed: 9, ballSpeed: 10, label: "Impossível" }
+// Variáveis do jogo
+let player1 = { 
+  x: 10, 
+  y: canvas.height / 2 - 50, 
+  width: 10, 
+  height: 100, 
+  score: 0, 
+  name: "Player 1",
+  speed: 10,
+  moveUp: false,
+  moveDown: false
 };
 
-// Menus
-let currentMenu = "start", selectedIndex = 0;
+let player2 = { 
+  x: canvas.width - 20, 
+  y: canvas.height / 2 - 50, 
+  width: 10, 
+  height: 100, 
+  score: 0, 
+  name: "Player 2",
+  speed: 10,
+  moveUp: false,
+  moveDown: false
+};
 
-// -----------------------------
-// FUNÇÕES DE MENU
-// -----------------------------
-function hideAllMenus() {
-  menuEl.style.display = "none";
-  difficultyMenuEl.style.display = "none";
-  helpMenuEl.style.display = "none";
-  nameMenuEl.style.display = "none";
-  endMenuEl.style.display = "none";
-  rankingMenuEl.style.display = "none";
-  messageEl.style.display = "none";
+let ball = { 
+  x: canvas.width / 2, 
+  y: canvas.height / 2, 
+  radius: 10, 
+  speedX: 5, 
+  speedY: 5,
+  originalSpeedX: 5,
+  originalSpeedY: 5,
+  trail: [] // Para efeito de rastro
+};
+
+let isPaused = false;
+let gameOver = false;
+let timer = 180; // 3 minutos
+let gameInterval, timerInterval;
+let againstCPU = false;
+let cpuDifficulty = "Normal";
+let isMobile = false;
+
+// Função para mostrar/esconder menus
+function showMenu(menuId) {
+  // Esconder todos os menus
+  document.querySelectorAll('.menu-container').forEach(menu => {
+    menu.classList.add('hidden');
+  });
+  
+  // Mostrar o menu específico
+  document.getElementById(menuId).classList.remove('hidden');
 }
 
-function updateMenuSelection(){
-  let options;
-  if(currentMenu==="start") options=menuEl.querySelectorAll(".menu-option");
-  else if(currentMenu==="difficulty") options=difficultyMenuEl.querySelectorAll(".menu-option");
-  else if(currentMenu==="help") options=helpMenuEl.querySelectorAll(".menu-option");
-  else if(currentMenu==="name") options=nameMenuEl.querySelectorAll(".menu-option");
-  else if(currentMenu==="end") options=endMenuEl.querySelectorAll(".menu-option");
-  else if(currentMenu==="ranking") options=rankingMenuEl.querySelectorAll(".menu-option");
-  else options=[];
-  options.forEach((opt,i)=>opt.classList.toggle("selected",i===selectedIndex));
-}
-
-// -----------------------------
-// RANKING
-// -----------------------------
-function saveScore(winner, score) {
-    let ranking = JSON.parse(localStorage.getItem("pongRanking")) || [];
-    ranking.push({ player: winner, points: score, date: new Date().toLocaleString() });
-
-    ranking.sort((a, b) => b.points - a.points);
-    ranking = ranking.slice(0, 5);
-
-    localStorage.setItem("pongRanking", JSON.stringify(ranking));
-}
-
-function showRanking() {
-    hideAllMenus();
-    const ranking = JSON.parse(localStorage.getItem("pongRanking")) || [];
-    const list = ranking.map((r, i) => 
-        `<li>${i+1}. ${r.player} - ${r.points} pts (${r.date})</li>`
-    ).join("");
-    document.getElementById("rankingList").innerHTML = list || "<li>Sem partidas ainda</li>";
-    rankingMenuEl.style.display = "block";
-    currentMenu = "ranking";
-    selectedIndex = 0;
-    updateMenuSelection();
-}
-
-// -----------------------------
-// FUNÇÕES DO JOGO
-// -----------------------------
-function startGame(){
-  canvas.style.display="block"; messageEl.style.display="block";
-  player1Score=0; player2Score=0;
-  paddle1Y = canvas.height/2 - paddleHeight/2;
-  paddle2Y = canvas.height/2 - paddleHeight/2;
-  resetBall(ballBaseSpeed);
-  timeLeft=180; paused=false; gameRunning=false; waitingStart=true;
-  timerEl.textContent = formatTime(timeLeft);
-  clearInterval(timerInterval);
-  particles=[];
-  requestAnimationFrame(gameLoop);
-}
-
-function resetBall(speed=5){ 
-  ballX=canvas.width/2; ballY=canvas.height/2; 
-  ballSpeedX=(Math.random()>0.5?1:-1)*speed; 
-  ballSpeedY=(Math.random()*4-2);
-}
-
-function updateTimer(){ if(!gameRunning||paused) return; timeLeft--; timerEl.textContent=formatTime(timeLeft); if(timeLeft<=0) endGame();}
-function formatTime(sec){ const m=Math.floor(sec/60), s=sec%60; return `${m}:${s<10?"0":""}${s}`; }
-
-function endGame(){
-  gameRunning=false; clearInterval(timerInterval); canvas.style.display="none"; messageEl.style.display="none"; timerEl.textContent="";
-  endMenuEl.style.display="block"; currentMenu="end"; selectedIndex=0; updateMenuSelection();
-  if(player1Score>player2Score){
-      document.getElementById("winnerText").textContent=player1Name+" venceu!";
-      winSound.play();
-      saveScore(player1Name, player1Score);
-  }
-  else if(player2Score>player1Score){
-      document.getElementById("winnerText").textContent=player2Name+" venceu!";
-      loseSound.play();
-      saveScore(player2Name, player2Score);
-  }
-  else{
-      document.getElementById("winnerText").textContent="Empate!";
+// Verificar se é dispositivo móvel
+function checkMobile() {
+  isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    touchControls.classList.remove("hidden");
+    // Ajustar tamanho do canvas para mobile
+    canvas.width = Math.min(800, window.innerWidth - 20);
+    canvas.height = Math.min(400, window.innerHeight * 0.5);
+    
+    // Reposicionar players
+    player1.x = 10;
+    player2.x = canvas.width - 20;
+    player1.y = canvas.height / 2 - 50;
+    player2.y = canvas.height / 2 - 50;
   }
 }
 
-// -----------------------------
-// DESENHOS
-// -----------------------------
-function drawRect(x,y,w,h,color){ctx.fillStyle=color; ctx.fillRect(x,y,w,h);}
-function drawCircle(x,y,r,color){ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.closePath(); ctx.fill();}
-function drawText(text,x,y){ctx.fillStyle="white"; ctx.font="24px Arial"; ctx.textAlign="center"; ctx.textBaseline="top"; ctx.fillText(text,x,y);}
-function createParticles(x,y,color){ for(let i=0;i<10;i++){ particles.push({x,y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,life:20,color}); } }
-function drawParticles(){ for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,2,2); p.x+=p.vx; p.y+=p.vy; p.life--; if(p.life<=0) particles.splice(i,1); } }
-
-function moveEverything(){
-  if(!gameRunning||paused) return;
-  ballX+=ballSpeedX; ballY+=ballSpeedY;
-  if(ballY<=0||ballY>=canvas.height){ ballSpeedY=-ballSpeedY; hitSound.play(); createParticles(ballX,ballY,"yellow");}
-  if(wPressed && paddle1Y>0)paddle1Y-=paddleSpeed;
-  if(sPressed && paddle1Y<canvas.height-paddleHeight)paddle1Y+=paddleSpeed;
-  if(gameMode==="2p"){ if(upPressed&&paddle2Y>0)paddle2Y-=paddleSpeed; if(downPressed&&paddle2Y<canvas.height-paddleHeight)paddle2Y+=paddleSpeed;}
-  else{ let c=paddle2Y+paddleHeight/2; if(c<ballY-35)paddle2Y+=cpuSpeed; else if(c>ballY+35)paddle2Y-=cpuSpeed; }
-  if(ballX<=paddleWidth && ballY>paddle1Y && ballY<paddle1Y+paddleHeight){ ballSpeedX=-ballSpeedX; let deltaY=ballY-(paddle1Y+paddleHeight/2); ballSpeedY=deltaY*0.25; hitSound.play(); createParticles(ballX,ballY,"white"); }
-  if(ballX>=canvas.width-paddleWidth && ballY>paddle2Y && ballY<paddle2Y+paddleHeight){ ballSpeedX=-ballSpeedX; let deltaY=ballY-(paddle2Y+paddleHeight/2); ballSpeedY=deltaY*0.25; hitSound.play(); createParticles(ballX,ballY,"white"); }
-  if(ballX<0){ player2Score++; pointSound.play(); createParticles(ballX,ballY,"red"); resetBall(Math.abs(ballSpeedX));}
-  if(ballX>canvas.width){ player1Score++; pointSound.play(); createParticles(ballX,ballY,"red"); resetBall(Math.abs(ballSpeedX));}
+function savePlayerNames() {
+  const player1Name = document.getElementById("player1Name").value.trim();
+  const player2Name = document.getElementById("player2Name").value.trim();
+  const cpuMode = document.getElementById("cpuMode").checked;
+  
+  if (player1Name) player1.name = player1Name;
+  if (player2Name) player2.name = player2Name;
+  
+  player1NameElem.textContent = player1.name;
+  player2NameElem.textContent = player2.name;
+  
+  againstCPU = cpuMode;
+  
+  showMenu('difficultyMenu');
 }
 
-function drawEverything(){
-  if(!gameRunning && !waitingStart) return;
-  drawRect(0,0,canvas.width,canvas.height,"black");
-  for(let i=0;i<canvas.height;i+=30) drawRect(canvas.width/2-1,i,2,20,"white");
-  drawRect(0,paddle1Y,paddleWidth,paddleHeight,"white");
-  drawRect(canvas.width-paddleWidth,paddle2Y,paddleWidth,paddleHeight,"white");
-  drawCircle(ballX,ballY,ballSize,"white");
-  drawText(player1Name+" "+player1Score,canvas.width/4,10);
-  drawText(player2Name+" "+player2Score,canvas.width*3/4,10);
-  drawParticles();
-  if(waitingStart) messageEl.style.display="block";
-  else messageEl.style.display="none";
+function backToMenu() {
+  // Parar os intervalos do jogo
+  if (gameInterval) clearInterval(gameInterval);
+  if (timerInterval) clearInterval(timerInterval);
+  
+  // Esconder tela do jogo
+  document.getElementById('gameScreen').classList.add('hidden');
+  
+  // Mostrar menu principal
+  document.getElementById('mainMenu').classList.remove('hidden');
 }
 
-function gameLoop(){ moveEverything(); drawEverything(); requestAnimationFrame(gameLoop); }
+function togglePause() {
+  isPaused = !isPaused;
+  document.getElementById("pauseButton").textContent = isPaused ? "Continuar" : "Pausar";
+}
 
-// -----------------------------
-// CLIQUES E SELEÇÃO DE MENUS
-// -----------------------------
-document.querySelectorAll(".menu-option").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-        const parent = btn.parentNode;
-        const options = Array.from(parent.querySelectorAll(".menu-option"));
-        selectedIndex = options.indexOf(btn);
-        handleMenuSelect();
-    });
-});
+// Funções de desenho
+function drawRect(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 15;
+  ctx.fillRect(x, y, w, h);
+  ctx.shadowBlur = 0;
+}
 
-startGameBtn.addEventListener("click", () => { handleMenuSelect(); });
+function drawCircle(x, y, r, color) {
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
 
-function handleMenuSelect() {
-  if (currentMenu === "start") {
-    const action = menuEl.querySelectorAll(".menu-option")[selectedIndex].dataset.action;
-    if (action === "cpu") {
-      hideAllMenus(); 
-      difficultyMenuEl.style.display = "block";
-      currentMenu = "difficulty"; 
-      selectedIndex = 0; 
-      updateMenuSelection();
-    } else if (action === "2p") {
-      hideAllMenus(); 
-      nameMenuEl.style.display = "block";
-      currentMenu = "name"; 
-      selectedIndex = 0; 
-      updateMenuSelection(); 
-      gameMode = "2p";
-    } else if (action === "help") {
-      hideAllMenus(); 
-      helpMenuEl.style.display = "block";
-      currentMenu = "help"; 
-      selectedIndex = 0; 
-      updateMenuSelection();
-    } else if (action === "ranking") {
-      showRanking();
+function drawBallWithEffects() {
+  // Desenhar rastro da bola
+  for (let i = 0; i < ball.trail.length; i++) {
+    const trail = ball.trail[i];
+    const alpha = i / ball.trail.length * 0.6;
+    ctx.globalAlpha = alpha;
+    drawCircle(trail.x, trail.y, ball.radius * (0.5 + i/ball.trail.length * 0.5), "rgba(255, 255, 255, 0.5)");
+  }
+  ctx.globalAlpha = 1;
+  
+  // Desenhar bola principal com efeito de glow
+  drawCircle(ball.x, ball.y, ball.radius, "white");
+  
+  // Efeito de brilho interno
+  const gradient = ctx.createRadialGradient(
+    ball.x, ball.y, 0,
+    ball.x, ball.y, ball.radius
+  );
+  gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+  gradient.addColorStop(0.7, "rgba(200, 200, 255, 0.7)");
+  gradient.addColorStop(1, "rgba(100, 100, 255, 0.3)");
+  
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawText(text, x, y, color, size = "30px") {
+  ctx.fillStyle = color;
+  ctx.font = `${size} Orbitron, Arial`;
+  ctx.textAlign = "center";
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 15;
+  ctx.fillText(text, x, y);
+  ctx.shadowBlur = 0;
+}
+
+function drawNet() {
+  for (let i = 0; i <= canvas.height; i += 20) {
+    drawRect(canvas.width / 2 - 1, i, 2, 10, "cyan");
+  }
+}
+
+// Funções de jogo
+function resetBall() {
+  ball.x = canvas.width / 2;
+  ball.y = canvas.height / 2;
+  ball.speedX = ball.originalSpeedX * (Math.random() > 0.5 ? 1 : -1);
+  ball.speedY = ball.originalSpeedY * (Math.random() * 2 - 1);
+  ball.trail = []; // Limpar rastro
+}
+
+function limitPaddleMovement() {
+  // Player 1 - Limites superior e inferior
+  if (player1.y < 0) player1.y = 0;
+  if (player1.y + player1.height > canvas.height) player1.y = canvas.height - player1.height;
+  
+  // Player 2 - Limites superior e inferior
+  if (player2.y < 0) player2.y = 0;
+  if (player2.y + player2.height > canvas.height) player2.y = canvas.height - player2.height;
+}
+
+function moveCPU() {
+  if (!againstCPU) return;
+  
+  // CPU move em direção à bola com base na dificuldade
+  const cpuCenter = player2.y + player2.height / 2;
+  const ballCenter = ball.y;
+  
+  // Ajustar a velocidade da CPU baseado na dificuldade
+  let cpuSpeed = player2.speed;
+  if (cpuDifficulty === "Muito Fácil") cpuSpeed *= 0.5;
+  else if (cpuDifficulty === "Fácil") cpuSpeed *= 0.7;
+  else if (cpuDifficulty === "Normal") cpuSpeed *= 0.9;
+  else if (cpuDifficulty === "Médio") cpuSpeed *= 1.0;
+  else if (cpuDifficulty === "Difícil") cpuSpeed *= 1.2;
+  else if (cpuDifficulty === "Impossível") cpuSpeed *= 1.5;
+  
+  // Adicionar um pequeno atraso para a CPU não ser perfeita
+  const reactionThreshold = {
+    "Muito Fácil": 50,
+    "Fácil": 40,
+    "Normal": 30,
+    "Médio": 20,
+    "Difícil": 10,
+    "Impossível": 5
+  }[cpuDifficulty];
+  
+  if (Math.abs(cpuCenter - ballCenter) > reactionThreshold) {
+    if (cpuCenter < ballCenter) {
+      player2.y += cpuSpeed;
+    } else if (cpuCenter > ballCenter) {
+      player2.y -= cpuSpeed;
     }
-  } else if (currentMenu === "difficulty") {
-    const diff = difficultyMenuEl.querySelectorAll(".menu-option")[selectedIndex].dataset.diff;
-    cpuSpeed = difficulties[diff].cpuSpeed;
-    ballBaseSpeed = difficulties[diff].ballSpeed;
-    hideAllMenus();
-    nameMenuEl.style.display = "block"; 
-    currentMenu = "name"; 
-    selectedIndex = 0; 
-    updateMenuSelection();
-    document.getElementById("player2Name").value = "CPU - " + difficulties[diff].label;
-  } else if (currentMenu === "help" || currentMenu === "ranking") {
-    hideAllMenus(); 
-    menuEl.style.display = "block"; 
-    currentMenu = "start"; 
-    selectedIndex = 0; 
-    updateMenuSelection();
-  } else if (currentMenu === "name") {
-    player1Name = document.getElementById("player1Name").value || "Player 1";
-    player2Name = document.getElementById("player2Name").value || player2Name;
-    hideAllMenus(); 
-    startGame();
-  } else if (currentMenu === "end") {
-    if (selectedIndex === 0) {
-      hideAllMenus(); 
-      startGame();
+  }
+}
+
+function checkCollision() {
+  // Colisão com player1 (esquerda)
+  if (ball.speedX < 0) {
+    if (ball.x - ball.radius <= player1.x + player1.width &&
+        ball.x - ball.radius >= player1.x &&
+        ball.y >= player1.y &&
+        ball.y <= player1.y + player1.height) {
+      
+      // Calcular ângulo de rebatida baseado na posição relativa
+      const hitPoint = (ball.y - player1.y) / player1.height;
+      const angle = (hitPoint - 0.5) * Math.PI / 3;
+      
+      // Aumentar velocidade
+      const speedIncrease = 0.1;
+      const currentSpeed = Math.sqrt(ball.speedX * ball.speedX + ball.speedY * ball.speedY);
+      const newSpeed = Math.min(currentSpeed + speedIncrease, 15);
+      
+      ball.speedX = Math.abs(newSpeed * Math.cos(angle));
+      ball.speedY = newSpeed * Math.sin(angle);
+      
+      // Ajustar posição para evitar colisão múltipla
+      ball.x = player1.x + player1.width + ball.radius;
+      
+      if (hitSound) hitSound.play();
+      return true;
+    }
+  }
+  
+  // Colisão com player2 (direita)
+  if (ball.speedX > 0) {
+    if (ball.x + ball.radius >= player2.x &&
+        ball.x + ball.radius <= player2.x + player2.width &&
+        ball.y >= player2.y &&
+        ball.y <= player2.y + player2.height) {
+      
+      // Calcular ângulo de rebatida baseado na posição relativa
+      const hitPoint = (ball.y - player2.y) / player2.height;
+      const angle = (hitPoint - 0.5) * Math.PI / 3;
+      
+      // Aumentar velocidade
+      const speedIncrease = 0.1;
+      const currentSpeed = Math.sqrt(ball.speedX * ball.speedX + ball.speedY * ball.speedY);
+      const newSpeed = Math.min(currentSpeed + speedIncrease, 15);
+      
+      ball.speedX = -Math.abs(newSpeed * Math.cos(angle));
+      ball.speedY = newSpeed * Math.sin(angle);
+      
+      // Ajustar posição para evitar colisão múltipla
+      ball.x = player2.x - ball.radius;
+      
+      if (hitSound) hitSound.play();
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+function update() {
+  if (isPaused || gameOver) return;
+
+  // Mover players baseado no estado das teclas
+  if (player1.moveUp) player1.y -= player1.speed;
+  if (player1.moveDown) player1.y += player1.speed;
+  
+  if (!againstCPU) {
+    if (player2.moveUp) player2.y -= player2.speed;
+    if (player2.moveDown) player2.y += player2.speed;
+  }
+
+  // Limitar movimento das raquetes
+  limitPaddleMovement();
+  
+  // Mover a CPU se estiver no modo contra CPU
+  if (againstCPU) {
+    moveCPU();
+  }
+
+  // Adicionar posição atual ao rastro (limitado a 5 posições)
+  ball.trail.push({x: ball.x, y: ball.y});
+  if (ball.trail.length > 5) {
+    ball.trail.shift();
+  }
+
+  // Mover a bola
+  ball.x += ball.speedX;
+  ball.y += ball.speedY;
+
+  // Colisão com borda superior/inferior
+  if (ball.y - ball.radius < 0) {
+    ball.y = ball.radius;
+    ball.speedY = Math.abs(ball.speedY);
+    if (hitSound) hitSound.play();
+  } else if (ball.y + ball.radius > canvas.height) {
+    ball.y = canvas.height - ball.radius;
+    ball.speedY = -Math.abs(ball.speedY);
+    if (hitSound) hitSound.play();
+  }
+
+  // Verificar colisões com os players
+  checkCollision();
+
+  // Pontuação
+  if (ball.x - ball.radius < 0) {
+    player2.score++;
+    player2ScoreElem.textContent = player2.score;
+    if (pointSound) pointSound.play();
+    resetBall();
+  } else if (ball.x + ball.radius > canvas.width) {
+    player1.score++;
+    player1ScoreElem.textContent = player1.score;
+    if (pointSound) pointSound.play();
+    resetBall();
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawNet();
+
+  // Desenhar bola com efeitos
+  drawBallWithEffects();
+
+  drawRect(player1.x, player1.y, player1.width, player1.height, "cyan");
+  drawRect(player2.x, player2.y, player2.width, player2.height, "purple");
+
+  // Mostrar mensagem de pausa
+  if (isPaused) {
+    drawText("PAUSADO", canvas.width / 2, canvas.height / 2, "yellow", "40px");
+  }
+  
+  // Mostrar mensagem de fim de jogo
+  if (gameOver) {
+    drawText("FIM DE JOGO", canvas.width / 2, canvas.height / 2 - 40, "red", "50px");
+    if (player1.score > player2.score) {
+      drawText(`${player1.name} Venceu!`, canvas.width / 2, canvas.height / 2 + 20, "cyan", "30px");
+    } else if (player2.score > player1.score) {
+      drawText(`${player2.name} Venceu!`, canvas.width / 2, canvas.height / 2 + 20, "purple", "30px");
     } else {
-      hideAllMenus(); 
-      menuEl.style.display = "block"; 
-      currentMenu = "start"; 
-      selectedIndex = 0; 
-      updateMenuSelection();
+      drawText("Empate!", canvas.width / 2, canvas.height / 2 + 20, "white", "30px");
     }
   }
 }
 
-// -----------------------------
-// CONTROLES
-// -----------------------------
-document.addEventListener("keydown",(e)=>{
-  if(e.key==="ArrowUp") upPressed=true;
-  if(e.key==="ArrowDown") downPressed=true;
-  if(e.key==="w") wPressed=true;
-  if(e.key==="s") sPressed=true;
+function gameLoop() {
+  update();
+  render();
+}
 
-  if(currentMenu!=="none"){
-    if(e.key==="ArrowUp"){ selectedIndex=(selectedIndex-1+document.querySelectorAll(`#${currentMenu} .menu-option`).length)%document.querySelectorAll(`#${currentMenu} .menu-option`).length; updateMenuSelection();}
-    if(e.key==="ArrowDown"){ selectedIndex=(selectedIndex+1)%document.querySelectorAll(`#${currentMenu} .menu-option`).length; updateMenuSelection();}
-    if(e.key==="Enter"){ handleMenuSelect(); }
-  }
+function updateTimerDisplay() {
+  let minutes = Math.floor(timer / 60);
+  let seconds = timer % 60;
+  gameTimerElem.textContent = `${minutes}:${seconds < 10 ? "0" + seconds : seconds}`;
+}
 
-  if(waitingStart && e.key==="Enter"){
-    waitingStart=false; gameRunning=true;
-    timerInterval=setInterval(updateTimer,1000);
+function startGame(difficulty) {
+  console.log("Iniciando jogo com dificuldade:", difficulty);
+  cpuDifficulty = difficulty;
+  
+  // Ajustar dificuldade
+  switch(difficulty) {
+    case 'Muito Fácil':
+      ball.originalSpeedX = 4;
+      ball.originalSpeedY = 4;
+      break;
+    case 'Fácil':
+      ball.originalSpeedX = 5;
+      ball.originalSpeedY = 5;
+      break;
+    case 'Normal':
+      ball.originalSpeedX = 6;
+      ball.originalSpeedY = 6;
+      break;
+    case 'Médio':
+      ball.originalSpeedX = 7;
+      ball.originalSpeedY = 7;
+      break;
+    case 'Difícil':
+      ball.originalSpeedX = 8;
+      ball.originalSpeedY = 8;
+      break;
+    case 'Impossível':
+      ball.originalSpeedX = 10;
+      ball.originalSpeedY = 10;
+      break;
+    default:
+      ball.originalSpeedX = 6;
+      ball.originalSpeedY = 6;
   }
-  if(gameRunning && e.key===" "){ paused=!paused; }
+  
+  // Resetar o jogo
+  if (gameInterval) clearInterval(gameInterval);
+  if (timerInterval) clearInterval(timerInterval);
+
+  player1.score = 0;
+  player2.score = 0;
+  player1ScoreElem.textContent = "0";
+  player2ScoreElem.textContent = "0";
+  timer = 180;
+  updateTimerDisplay();
+  gameOver = false;
+  isPaused = false;
+  document.getElementById("pauseButton").textContent = "Pausar";
+
+  resetBall();
+
+  // Mostrar tela do jogo e esconder menus
+  document.getElementById('difficultyMenu').classList.add('hidden');
+  document.getElementById('gameScreen').classList.remove('hidden');
+
+  // Iniciar loops do jogo
+  gameInterval = setInterval(gameLoop, 1000 / 60);
+  timerInterval = setInterval(() => {
+    if (!isPaused && !gameOver) {
+      timer--;
+      updateTimerDisplay();
+      if (timer <= 0) {
+        gameOver = true;
+        clearInterval(gameInterval);
+        clearInterval(timerInterval);
+        if (player1.score > player2.score && winSound) {
+          winSound.play();
+        } else if (player2.score > player1.score && loseSound) {
+          loseSound.play();
+        }
+      }
+    }
+  }, 1000);
+}
+
+// Controles de teclado
+document.addEventListener("keydown", (e) => {
+  if (e.key === "w" || e.key === "W") player1.moveUp = true;
+  if (e.key === "s" || e.key === "S") player1.moveDown = true;
+  
+  // Se não for modo CPU, player2 pode ser controlado
+  if (!againstCPU) {
+    if (e.key === "ArrowUp") player2.moveUp = true;
+    if (e.key === "ArrowDown") player2.moveDown = true;
+  }
+  
+  if (e.key === " ") togglePause(); // Pausa
+  if (e.key === "Enter" && !gameInterval) startGame('Normal'); // Inicia com dificuldade padrão
 });
 
-document.addEventListener("keyup",(e)=>{
-  if(e.key==="ArrowUp") upPressed=false;
-  if(e.key==="ArrowDown") downPressed=false;
-  if(e.key==="w") wPressed=false;
-  if(e.key==="s") sPressed=false;
+document.addEventListener("keyup", (e) => {
+  if (e.key === "w" || e.key === "W") player1.moveUp = false;
+  if (e.key === "s" || e.key === "S") player1.moveDown = false;
+  
+  if (!againstCPU) {
+    if (e.key === "ArrowUp") player2.moveUp = false;
+    if (e.key === "ArrowDown") player2.moveDown = false;
+  }
 });
 
-// -----------------------------
-// CONTROLES TOUCH
-// -----------------------------
-document.getElementById("p1-up").addEventListener("touchstart", () => wPressed = true);
-document.getElementById("p1-up").addEventListener("touchend", () => wPressed = false);
-document.getElementById("p1-down").addEventListener("touchstart", () => sPressed = true);
-document.getElementById("p1-down").addEventListener("touchend", () => sPressed = false);
-document.getElementById("p2-up").addEventListener("touchstart", () => upPressed = true);
-document.getElementById("p2-up").addEventListener("touchend", () => upPressed = false);
-document.getElementById("p2-down").addEventListener("touchstart", () => downPressed = true);
-document.getElementById("p2-down").addEventListener("touchend", () => downPressed = false);
+// Controles de toque para mobile
+let leftTouchActive = false;
+let rightTouchActive = false;
+
+document.getElementById("leftTouch").addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  leftTouchActive = true;
+});
+
+document.getElementById("leftTouch").addEventListener("touchend", (e) => {
+  e.preventDefault();
+  leftTouchActive = false;
+});
+
+document.getElementById("rightTouch").addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  rightTouchActive = true;
+});
+
+document.getElementById("rightTouch").addEventListener("touchend", (e) => {
+  e.preventDefault();
+  rightTouchActive = false;
+});
+
+// Atualizar movimento baseado no toque
+function updateTouchControls() {
+  if (isMobile) {
+    player1.moveUp = leftTouchActive;
+    player1.moveDown = false;
+    
+    if (!againstCPU) {
+      player2.moveUp = rightTouchActive;
+      player2.moveDown = false;
+    }
+  }
+}
+
+// Modificar o gameLoop para incluir controles de toque
+const originalGameLoop = gameLoop;
+gameLoop = function() {
+  updateTouchControls();
+  originalGameLoop();
+};
+
+// Configuração dos event listeners para os botões
+document.addEventListener("DOMContentLoaded", function() {
+  // Menu principal
+  document.getElementById("playButton").addEventListener("click", function() {
+    showMenu('playerMenu');
+  });
+  
+  document.getElementById("rankingButton").addEventListener("click", function() {
+    showMenu('rankingMenu');
+  });
+  
+  document.getElementById("helpButton").addEventListener("click", function() {
+    showMenu('helpMenu');
+  });
+  
+  // Menu de jogadores
+  document.getElementById("continueButton").addEventListener("click", savePlayerNames);
+  document.getElementById("backFromPlayerMenu").addEventListener("click", function() {
+    showMenu('mainMenu');
+  });
+  
+  // Menu de dificuldade
+  document.querySelectorAll("#difficultyMenu button[data-difficulty]").forEach(button => {
+    button.addEventListener("click", function() {
+      startGame(this.getAttribute('data-difficulty'));
+    });
+  });
+  
+  document.getElementById("backFromDifficultyMenu").addEventListener("click", function() {
+    showMenu('playerMenu');
+  });
+  
+  // Menu de ranking
+  document.getElementById("backFromRankingMenu").addEventListener("click", function() {
+    showMenu('mainMenu');
+  });
+  
+  // Menu de ajuda
+  document.getElementById("backFromHelpMenu").addEventListener("click", function() {
+    showMenu('mainMenu');
+  });
+  
+  // Tela de jogo
+  document.getElementById("backToMenuButton").addEventListener("click", backToMenu);
+  document.getElementById("pauseButton").addEventListener("click", togglePause);
+  
+  // Inicialização
+  checkMobile();
+  console.log("Pong Neon carregado com sucesso!");
+});
